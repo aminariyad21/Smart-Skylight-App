@@ -1,0 +1,69 @@
+{
+  "compare": {
+    "Gradient Boosting": {
+      "mse": 239.2,
+      "rmse": 15.5,
+      "mae": 11.2,
+      "r2": 0.963,
+      "cv": 0.947
+    },
+    "Random Forest": {
+      "mse": 371.4,
+      "rmse": 19.3,
+      "mae": 14.1,
+      "r2": 0.942,
+      "cv": 0.917
+    },
+    "Decision Tree": {
+      "mse": 1276.0,
+      "rmse": 35.7,
+      "mae": 23.1,
+      "r2": 0.8,
+      "cv": 0.821
+    },
+    "Linear Regression": {
+      "mse": 853.8,
+      "rmse": 29.2,
+      "mae": 22.4,
+      "r2": 0.866,
+      "cv": 0.829
+    }
+  },
+  "importances": {
+    "Orientation_E": 0.0015,
+    "Orientation_N": 0.0414,
+    "Orientation_S": 0.0041,
+    "Orientation_W": 0.0016,
+    "U_Divisions": 0.0084,
+    "V_Divisions": 0.0127,
+    "Depth_Factor": 0.0129,
+    "Attractor_Strength": 0.0637,
+    "Aperture_Target": 0.2429,
+    "Max_Rotation_deg": 0.6109
+  },
+  "n_trees": 300,
+  "n_nodes": 186308,
+  "avg_depth": 14.8,
+  "root_feat": "Max_Rotation_deg",
+  "root_thr": 60.5,
+  "shg_min": 0.0,
+  "shg_max": 462.47,
+  "feature_names": [
+    "Orientation_E",
+    "Orientation_N",
+    "Orientation_S",
+    "Orientation_W",
+    "U_Divisions",
+    "V_Divisions",
+    "Depth_Factor",
+    "Attractor_Strength",
+    "Aperture_Target",
+    "Max_Rotation_deg"
+  ],
+  "exposure": {
+    "S": 485.0,
+    "W": 462.0,
+    "E": 410.0,
+    "N": 250.0
+  }
+}
