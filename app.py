@@ -1,16 +1,18 @@
 # =============================================================================
-#  SMART SKYLIGHT  -  dashboard  (self-contained Streamlit app, dark theme)
-#  CCAS 2.6 - Intelligent Systems Design  ·  Amina Riyad
+#  SMART SKYLIGHT  -  interactive design studio  (self-contained Streamlit app)
+#  CCAS 2.6 - Intelligent Systems Design
 #
-#  A generative shading facade + a machine-learning surrogate that predicts
-#  Solar Heat Gain live - in Grasshopper, and right here.
+#  An adaptive triangular shading screen for a hot climate. Move the sliders,
+#  watch the screen react, and read the predicted Solar Heat Gain instantly.
 #
-#  Predictions run from the portable forest (shading_rf_portable.json) in pure
-#  Python - identical to the scikit-learn .pkl, so it deploys with no version pain.
+#  ZERO ML DEPENDENCY: predictions run from the portable forest
+#  (shading_rf_portable.json) in pure Python - byte-for-byte identical to the
+#  scikit-learn .pkl, so this deploys on Streamlit Cloud with NO version pain.
 #
-#  RUN:  pip install -r requirements.txt   then   streamlit run app.py
-#  Files needed (same folder): shading_units_dataset.csv, shading_units_raw.csv,
-#       shading_rf_portable.json, facade_render.jpg, charts/, .streamlit/config.toml
+#  RUN LOCALLY:   pip install -r requirements.txt
+#                 streamlit run app.py
+#  FILES NEEDED (same folder): shading_units_dataset.csv, shading_units_raw.csv,
+#                 shading_rf_portable.json, facade_render.jpg
 # =============================================================================
 import os, json, struct
 import numpy as np
@@ -20,6 +22,9 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
 
+# Anchor relative file reads (CSV / JSON / image) to THIS file's folder, so the
+# app works no matter where the host launches it from (e.g. Streamlit Cloud runs
+# from the repo root, which may differ from the app's directory).
 try:
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 except Exception:
@@ -27,392 +32,400 @@ except Exception:
 
 st.set_page_config(page_title="Smart Skylight", page_icon="\U0001F7E7", layout="wide")
 
-# ----------------------------------------------------------------- dark CSS
-CORAL, TEAL, BLUE = "#E8643C", "#5FA89F", "#5B8DC9"
+# ----------------------------------------------------------------- palette/CSS
+INK, MUTED   = "#17130F", "#8C8576"
+CARD, LINE   = "#FBF8F1", "#C9C0AC"
+AMBER, TEAL, NAVY = "#C75B39", "#1F6F6B", "#1F3A5F"
+
 st.markdown("""
 <style>
-.block-container {padding-top:1.4rem; max-width:1200px;}
-h1,h2,h3,h4 {color:#FFFFFF !important; font-weight:700; letter-spacing:-.01em;}
-h2 {font-size:30px; margin:.2em 0 .1em;}
-h3 {font-size:21px;}
-.tagline {color:#9BA1AC; font-size:16px; margin:-4px 0 2px;}
-.idea {color:#C8CCD4; font-size:16px; line-height:1.62;}
-.idea b {color:#FFFFFF;} .idea i {color:#C8CCD4;}
-.metric {padding:4px 0 16px;}
-.metric .ml {color:#8B919C; font-size:14px; margin-bottom:1px;}
-.metric .mv {color:#FFFFFF; font-size:40px; font-weight:700; line-height:1.04;}
-.metric .mv small {font-size:18px; color:#9BA1AC; font-weight:600;}
-.flow {margin:6px 0 2px; line-height:2.7;}
-.pill {display:inline-block; background:#171B24; border:1px solid #2A2F3A; border-radius:20px;
-  padding:7px 15px; margin:3px 1px; color:#D8DCE2; font-size:14px;}
-.arr {color:#E8643C; margin:0 4px; font-weight:700;}
-table.vt {width:100%; border-collapse:collapse; margin-top:8px; font-size:14px;}
-table.vt th {text-align:left; color:#8B919C; font-weight:600; padding:8px 10px;
-  border-bottom:1px solid #2A2F3A; font-size:13px;}
-table.vt td {color:#D8DCE2; padding:8px 10px; border-bottom:1px solid #1C212B;}
-table.vt td:first-child {color:#EDEFF2; font-family:ui-monospace,monospace;}
-.kicker {font-size:12px; letter-spacing:.13em; text-transform:uppercase; color:#5FA89F; margin:16px 0 3px;}
-.verdict {border-radius:12px; padding:18px 22px; margin:6px 0 10px; border:1px solid;}
-.note {background:#12161E; border:1px solid #232936; border-radius:10px; padding:14px 18px; color:#C8CCD4; font-size:15px; line-height:1.55;}
-.note b {color:#FFD9A8;}
-.stTabs [data-baseweb="tab-list"] {gap:24px; border-bottom:1px solid #21262F; flex-wrap:wrap;}
-.stTabs [data-baseweb="tab"] {font-size:15px; color:#9BA1AC; padding:8px 2px; background:transparent;}
-.stTabs [aria-selected="true"] {color:#E8643C !important;}
-.stTabs [data-baseweb="tab-highlight"] {background:#E8643C;}
-[data-testid="stMetric"] {background:#12161E; border:1px solid #232936; border-radius:8px; padding:10px 14px;}
-[data-testid="stMetricValue"] {color:#FFFFFF;}
-.stSlider label {color:#9BA1AC !important;}
-img {border-radius:8px;}
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,500&family=Spline+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap');
+html, body, [data-testid="stAppViewContainer"] {background-color:#F5F1E8; color:#17130F;}
+[data-testid="stHeader"] {background:rgba(245,241,232,.85);}
+.block-container {padding-top:1.1rem; max-width:1180px;}
+p, li, label, [data-testid="stMarkdownContainer"] p {font-family:'Spline Sans',sans-serif;}
+code, pre {font-family:'Space Mono',monospace;}
+h1,h2,h3,h4 {font-family:'Fraunces',Georgia,serif !important; color:#17130F !important; letter-spacing:-.01em;}
+.sk-title {font-family:'Fraunces',serif; font-weight:700; font-size:46px; line-height:1.04; margin:0 0 4px;}
+.sk-title em {font-style:italic; font-weight:500; color:#C75B39;}
+.sk-mark {color:#C75B39; font-size:24px; line-height:1;}
+.sk-sub {color:#5F5E5A; font-size:17px; max-width:820px;}
+.sk-chip {display:inline-block; font-family:'Space Mono',monospace; font-size:11.5px; letter-spacing:.04em;
+  color:#A8500F; border:1px solid #C75B39; border-radius:20px; padding:3px 12px; margin:10px 8px 0 0; background:#FBF8F1;}
+.sk-rule {height:2px; background:#17130F; margin:16px 0 3px;}
+.sk-rule2 {height:1px; background:#C9C0AC; margin:0 0 4px;}
+.sk-kicker {font-family:'Space Mono',monospace; font-size:11.5px; letter-spacing:.16em;
+  text-transform:uppercase; color:#1F6F6B; margin:10px 0 2px;}
+.sk-verdict {border-radius:10px; padding:16px 20px; margin:2px 0 8px; border:1px solid;}
+.sk-step {background:#FBF8F1; border:1px solid #C9C0AC; border-left:4px solid #C75B39;
+  border-radius:6px; padding:10px 14px; margin:8px 0;}
+.sk-eq {background:#1F3A5F; color:#F5F1E8; border-radius:8px; padding:14px 18px; font-family:'Space Mono',monospace;
+  font-size:13px; line-height:1.7; overflow-x:auto;}
+.stTabs [data-baseweb="tab-list"] {gap:16px; border-bottom:1px solid #DDD6C5; flex-wrap:wrap;}
+.stTabs [data-baseweb="tab"] {font-family:'Space Mono',monospace; text-transform:uppercase;
+  letter-spacing:.05em; font-size:12px; color:#5F5E5A; padding:10px 2px; background:transparent;}
+.stTabs [aria-selected="true"] {color:#A8500F !important;}
+.stTabs [data-baseweb="tab-highlight"] {background-color:#C75B39;}
+[data-testid="stMetric"] {background:#FBF8F1; border:1px solid #C9C0AC; border-radius:6px; padding:12px 16px;}
+[data-testid="stMetricLabel"] p {font-family:'Space Mono',monospace !important; font-size:11px !important;
+  letter-spacing:.07em; text-transform:uppercase; color:#8C8576;}
+[data-testid="stMetricValue"] {font-family:'Fraunces',serif; color:#17130F;}
+[data-testid="stExpander"] {background:#FBF8F1; border:1px solid #C9C0AC; border-radius:6px;}
+.stSlider label {font-family:'Space Mono',monospace !important; font-size:11.5px !important;
+  letter-spacing:.04em; text-transform:uppercase; color:#5F5E5A;}
 </style>
 """, unsafe_allow_html=True)
 
-pio.templates["skydark"] = go.layout.Template(layout=go.Layout(
-    font=dict(family="sans-serif", size=13, color="#C8CCD4"),
-    title=dict(font=dict(size=17, color="#FFFFFF")),
+pio.templates["sky"] = go.layout.Template(layout=go.Layout(
+    font=dict(family="Spline Sans, sans-serif", size=13, color=INK),
+    title=dict(font=dict(family="Fraunces, serif", size=18, color=INK)),
     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-    colorway=[CORAL, TEAL, BLUE, "#E0A33C", "#9BA1AC"],
-    xaxis=dict(gridcolor="#21262F", zerolinecolor="#2A2F3A"),
-    yaxis=dict(gridcolor="#21262F", zerolinecolor="#2A2F3A"),
-    margin=dict(l=10, r=10, t=48, b=10), legend=dict(bgcolor="rgba(0,0,0,0)")))
-pio.templates.default = "plotly_dark+skydark"
+    colorway=[AMBER, TEAL, NAVY, "#BA7517", "#5F5E5A"],
+    xaxis=dict(gridcolor="#E7E1D2", zerolinecolor=LINE),
+    yaxis=dict(gridcolor="#E7E1D2", zerolinecolor=LINE),
+    margin=dict(l=10, r=10, t=48, b=10),
+    legend=dict(bgcolor="rgba(0,0,0,0)")))
+pio.templates.default = "plotly_white+sky"
 
 # ----------------------------------------------------------------- constants
 NUM = ["U_Divisions", "V_Divisions", "Depth_Factor",
        "Attractor_Strength", "Aperture_Target", "Max_Rotation_deg"]
 FEATURES = NUM + ["Orientation"]
-FEATURE_COLS = FEATURES
 TARGET   = "Solar_Heat_Gain_kWh_m2"
 ORIENTS  = ["N", "E", "S", "W"]
-EXPOSURE = {"S": 1294, "W": 1090, "E": 1090, "N": 552}   # real Cairo annual irradiance (pvlib clear-sky)
+ORIENT_COLORS = {"S": AMBER, "W": "#BA7517", "E": NAVY, "N": TEAL}
+EXPOSURE = {"S": 900, "W": 820, "E": 720, "N": 450}
 NICE = {"U_Divisions": "Panels across (U)", "V_Divisions": "Panels up (V)",
         "Depth_Factor": "Fin depth", "Attractor_Strength": "Attractor pull",
-        "Aperture_Target": "Aperture (openness)", "Max_Rotation_deg": "Panel rotation",
-        "Orientation": "Orientation"}
-# upgraded model metrics (Random Forest deployed)
-METRICS = {"r2": 0.952, "cv": 0.933, "rmse": 37.7}
-COMPARE = pd.DataFrame({
-    "Model": ["Gradient Boosting", "Random Forest  \u2605", "Decision Tree", "Linear Regression"],
-    "R\u00b2 test": [0.957, 0.952, 0.897, 0.870],
-    "R\u00b2 5-fold CV": [0.943, 0.933, 0.849, 0.881],
-    "RMSE (kWh/m\u00b2)": [35.95, 37.71, 55.64, 62.40]})
+        "Aperture_Target": "Aperture (openness)", "Max_Rotation_deg": "Panel rotation"}
 
-def kicker(t): st.markdown(f'<div class="kicker">{t}</div>', unsafe_allow_html=True)
-def metric_card(label, value):
-    st.markdown(f'<div class="metric"><div class="ml">{label}</div><div class="mv">{value}</div></div>',
-                unsafe_allow_html=True)
-def vtable(headers, rows):
-    h = "".join(f"<th>{x}</th>" for x in headers)
-    body = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows)
-    st.markdown(f'<table class="vt"><thead><tr>{h}</tr></thead><tbody>{body}</tbody></table>',
-                unsafe_allow_html=True)
+def kicker(t): st.markdown(f'<div class="sk-kicker">{t}</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------------------- data + model
 @st.cache_data(show_spinner=False)
-def load_csv(name): return pd.read_csv(name) if os.path.exists(name) else None
+def load_csv(name):
+    return pd.read_csv(name) if os.path.exists(name) else None
+
 @st.cache_resource(show_spinner=False)
 def load_forest():
-    with open("shading_rf_portable.json") as f: return json.load(f)
+    with open("shading_rf_portable.json") as f:
+        return json.load(f)
+
 def f32(v): return struct.unpack("f", struct.pack("f", v))[0]
 
 def predict_df(forest, frame):
     cats, order = forest["orientation_categories"], forest["numeric_order"]
-    trees, nt = forest["trees"], forest["n_trees"]; out = []
+    trees, nt = forest["trees"], forest["n_trees"]
+    out = []
     for _, r in frame.iterrows():
         oh = [1.0 if c == str(r["Orientation"]).upper() else 0.0 for c in cats]
-        x  = [f32(v) for v in (oh + [float(r[n]) for n in order])]; tot = 0.0
+        x  = [f32(v) for v in (oh + [float(r[n]) for n in order])]
+        tot = 0.0
         for tr in trees:
-            cl, cr, fe, th, va = tr["cl"], tr["cr"], tr["f"], tr["t"], tr["v"]; n = 0
-            while cl[n] != cr[n]: n = cl[n] if x[fe[n]] <= th[n] else cr[n]
+            cl, cr, fe, th, va = tr["cl"], tr["cr"], tr["f"], tr["t"], tr["v"]
+            n = 0
+            while cl[n] != cr[n]:
+                n = cl[n] if x[fe[n]] <= th[n] else cr[n]
             tot += va[n]
         out.append(tot / nt)
     return np.array(out)
-def predict_one(forest, d): return float(predict_df(forest, pd.DataFrame([d]))[0])
 
-def img(name, caption=None):
-    p = os.path.join("charts", name)
-    if os.path.exists(p): st.image(p, width='stretch', caption=caption)
-    else: st.info(f"chart not found: {name}")
+def predict_one(forest, d):
+    return float(predict_df(forest, pd.DataFrame([d]))[0])
 
-def gh_export_block(d, shg, key):
-    row = {k: d[k] for k in FEATURE_COLS}; row["Predicted_SHG_kWh_m2"] = round(float(shg), 1)
-    kicker("Output \u2014 send this design to Grasshopper")
-    cc = st.columns(2)
-    cc[0].download_button("\u2b07  Parameters as CSV", pd.DataFrame([row]).to_csv(index=False).encode(),
-        file_name="skylight_design.csv", mime="text/csv", key=f"csv_{key}", width='stretch')
-    cc[1].download_button("\u2b07  Parameters as JSON", json.dumps(row, indent=2).encode(),
-        file_name="skylight_design.json", mime="application/json", key=f"json_{key}", width='stretch')
-    st.caption("Wire these six values + orientation into the **GH predictive node** to rebuild this exact "
-               "screen in Rhino \u2014 the node returns the same predicted heat gain.")
-
+# ----------------------------------------------------------------- live facade
 def facade_figure(d):
     nx, ny = 26, 16
-    xs, ys = np.meshgrid(np.linspace(0, 1, nx), np.linspace(0, 1, ny)); xs, ys = xs.ravel(), ys.ravel()
+    xs, ys = np.meshgrid(np.linspace(0, 1, nx), np.linspace(0, 1, ny))
+    xs, ys = xs.ravel(), ys.ravel()
     ax_, ay_ = 0.74, 0.58
-    falloff = 2.0 * np.exp(-3.0 * np.sqrt((xs-ax_)**2 + (ys-ay_)**2))
-    tilt = np.clip(d["Max_Rotation_deg"] * (0.5 + 5.0*d["Attractor_Strength"]*falloff), 0, 90)
-    open_ = np.clip((0.2 + 0.8*d["Aperture_Target"]/100.0) * (tilt/90.0), 0, 1)
+    dist = np.sqrt((xs - ax_)**2 + (ys - ay_)**2)
+    falloff = 2.0 * np.exp(-3.0 * dist)
+    tilt = np.clip(d["Max_Rotation_deg"] * (0.5 + 5.0 * d["Attractor_Strength"] * falloff), 0, 90)
+    open_ = np.clip((0.2 + 0.8 * d["Aperture_Target"]/100.0) * (tilt/90.0), 0, 1)
     sym = np.where(((xs*(nx-1)).round() + (ys*(ny-1)).round()) % 2 == 0, "triangle-up", "triangle-down")
+    size = 11 + 7*d["Depth_Factor"]
     fig = go.Figure(go.Scatter(x=xs, y=ys, mode="markers",
-        marker=dict(symbol=sym, angle=tilt, size=11+7*d["Depth_Factor"], color=open_, colorscale="YlOrRd",
-                    cmin=0, cmax=1, colorbar=dict(title="openness"), line=dict(width=.4, color="#3A3F4A")),
+        marker=dict(symbol=sym, angle=tilt, size=size, color=open_, colorscale="YlOrRd",
+                    cmin=0, cmax=1, colorbar=dict(title="openness"), line=dict(width=.4, color="#4A3A2C")),
         hoverinfo="skip"))
-    fig.add_trace(go.Scatter(x=[ax_], y=[ay_], mode="markers+text", marker=dict(symbol="star", size=15, color=CORAL),
-        text=["attractor"], textposition="bottom center", textfont=dict(color="#C8CCD4", size=12), hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=[ax_], y=[ay_], mode="markers+text",
+        marker=dict(symbol="star", size=14, color=NAVY), text=["attractor"],
+        textposition="bottom center", textfont=dict(color=INK, size=12), hoverinfo="skip"))
     fig.update_xaxes(visible=False, range=[-.04, 1.04])
     fig.update_yaxes(visible=False, range=[-.06, 1.06], scaleanchor="x")
-    fig.update_layout(height=470, showlegend=False, title="The screen, live \u2014 panels rotate & open as you design")
+    fig.update_layout(height=480, showlegend=False,
+                      title="The screen, live \u2014 panels rotate & open as you design")
     return fig
 
 df  = load_csv("shading_units_dataset.csv")
 raw = load_csv("shading_units_raw.csv")
 forest = load_forest()
+
+# precompute SHG bounds for the verdict scale
 if df is not None:
     SHG_LO, SHG_HI = float(df[TARGET].quantile(.05)), float(df[TARGET].quantile(.95))
 
 # ----------------------------------------------------------------- header
-st.markdown('<div class="tagline">A generative shading facade + a machine-learning surrogate that predicts '
-            'Solar Heat Gain live \u2014 in Grasshopper, and right here.</div>', unsafe_allow_html=True)
+st.markdown("""
+<div>
+  <div class="sk-mark">&#9650;</div>
+  <div class="sk-title">Smart <em>Skylight</em></div>
+  <div class="sk-sub">An adaptive triangular shading screen for a hot climate &mdash; design it with
+  six sliders and feel the solar-heat consequence instantly. A trained Random Forest powers the numbers,
+  quietly, in milliseconds.</div>
+  <div>
+    <span class="sk-chip">Cairo &middot; hot, high-irradiance</span>
+    <span class="sk-chip">attractor-driven screen</span>
+    <span class="sk-chip">R&sup2; = 0.937 on unseen designs</span>
+    <span class="sk-chip">zero-install prediction</span>
+  </div>
+  <div class="sk-rule"></div><div class="sk-rule2"></div>
+</div>
+""", unsafe_allow_html=True)
 
-T = st.tabs(["\U0001F3E0 Project", "\U0001F4D3 Data journey", "\U0001F4CA Analysis",
-             "\u2699\uFE0F Model", "\U0001F3A8 Design studio", "\U0001F997 Grasshopper & files"])
+if df is None:
+    st.error("shading_units_dataset.csv not found next to app.py.")
+    st.stop()
 
-# ============================================================ 0  PROJECT
+T = st.tabs(["The idea", "Facade studio", "Data processing", "Explore the data",
+             "Design map", "The model"])
+
+# ============================================================ 1  THE IDEA
 with T[0]:
-    left, right = st.columns([1.35, 1])
-    with left:
-        st.markdown("## The idea")
-        st.markdown('<div class="idea">An <b>attractor-driven triangular shading facade</b> is built in '
-            'Grasshopper. Six sliders generate the geometry \u2014 and the question every designer has is: '
-            '<i>how much solar energy will this variant let through?</i> Normally that needs a slow separate '
-            'analysis. This project trains a <b>surrogate model</b> on sampled designs so the answer arrives '
-            '<b>instantly, while the sliders move.</b></div>', unsafe_allow_html=True)
-        st.markdown('<div class="idea" style="margin-top:14px;"><b>What we predict:</b> Solar Heat Gain '
-            '(kWh/m\u00b2) \u2014 the number an architect minimises to fight cooling loads in a hot city like '
-            'Cairo.</div>', unsafe_allow_html=True)
-    with right:
-        a, b = st.columns(2)
-        with a: metric_card("Designs in dataset", "500")
-        with b: metric_card("Test accuracy", "R\u00b2 \u2248 0.95")
-        c, d2 = st.columns(2)
-        with c: metric_card("Features", "6 + orientation")
-        with d2: metric_card("Deployed model", "Random Forest")
+    kicker("The problem")
+    st.subheader("In a hot city, the sun is the bill")
+    c1, c2 = st.columns([1.05, 1])
+    with c1:
+        st.markdown(
+            "Cooling dominates a building's energy use in a high-irradiance climate, and the **facade "
+            "decides how much sun reaches the glass**. A fixed screen is wrong twice \u2014 too closed and "
+            "you lose daylight and views, too open and the building cooks.\n\n"
+            "**Smart Skylight** is a screen of triangular panels that doesn't have to choose: an "
+            "**attractor curve** drives each panel's rotation and opening, so the screen closes hard "
+            "where exposure is brutal and relaxes where it isn't. The question this project answers \u2014 "
+            "*how much solar heat does any given screen let in?* \u2014 normally needs a slow simulation. "
+            "Here a surrogate model answers it the instant a slider moves.")
+        st.markdown('<div class="sk-step"><b>What we predict.</b> Solar Heat Gain '
+                    '(kWh/m\u00b2/yr) \u2014 the quantity an architect minimises to cut cooling load.</div>',
+                    unsafe_allow_html=True)
+    with c2:
+        if os.path.exists("facade_render.jpg"):
+            st.image("facade_render.jpg", caption="The triangular shading screen (Rhino / Grasshopper)",
+                     use_container_width=True)
+    kicker("The stakes \u2014 orientation first")
+    ex = pd.DataFrame({"Orientation": list(EXPOSURE), "Annual exposure (kWh/m\u00b2)": list(EXPOSURE.values())})
+    st.plotly_chart(px.bar(ex, x="Orientation", y="Annual exposure (kWh/m\u00b2)", color="Orientation",
+                           color_discrete_map=ORIENT_COLORS,
+                           title="A south facade receives roughly twice a north one \u2014 so one screen setting can't serve every wall"),
+                    use_container_width=True)
 
-    st.markdown("## The workflow (end to end)")
-    steps = ["Grasshopper model", "CSV dataset", "Data cleaning", "Feature engineering", "Train / test split",
-             "Train model", "Evaluate", "Export .pkl", "GH predictive node", "Dashboard & website"]
-    html = '<div class="flow">'
-    for i, s in enumerate(steps):
-        html += f'<span class="pill">{s}</span>'
-        if i < len(steps) - 1: html += '<span class="arr">\u2192</span>'
-    st.markdown(html + "</div>", unsafe_allow_html=True)
-
-    st.markdown("## The variables")
-    v1, v2 = st.columns(2)
-    with v1:
-        st.markdown("**Features (X)** \u2014 the six Grasshopper sliders + context")
-        vtable(["feature", "range", "meaning"], [
-            ["U_Divisions", "1 \u2013 100", "panels horizontally"],
-            ["V_Divisions", "1 \u2013 100", "panels vertically"],
-            ["Depth_Factor", "0.1 \u2013 1.0", "fin projection depth"],
-            ["Attractor_Strength", "0 \u2013 0.1", "local rotation pull"],
-            ["Aperture_Target", "0 \u2013 100", "opening size"],
-            ["Max_Rotation_deg", "0 \u2013 100", "panel tilt"],
-            ["Orientation", "N/E/S/W", "facade direction"]])
-    with v2:
-        st.markdown("**Targets (Y)** \u2014 derived per design; \u2b50 is what the model predicts")
-        vtable(["target", "unit", "meaning"], [
-            ["Total_Shading_Area_m2", "m\u00b2", "facade + slanted fins"],
-            ["Openness_Ratio", "0\u20131", "how open the screen is"],
-            ["Avg_Panel_Tilt_deg", "\u00b0", "average panel tilt"],
-            ["Projection_Depth_m", "m", "fin depth"],
-            ["Material_Volume_m3", "m\u00b3", "material used"],
-            ["\u2b50 Solar_Heat_Gain_kWh_m2", "kWh/m\u00b2", "what the model predicts"]])
-
-# ============================================================ 1  DATA JOURNEY
+# ============================================================ 2  FACADE STUDIO
 with T[1]:
-    st.markdown("## From a messy export to a model-ready table")
-    st.markdown('<div class="idea">The pipeline turns 500 sampled designs into a clean dataset in three '
-                'classic steps \u2014 cleansing, transformation, integration.</div>', unsafe_allow_html=True)
-    a, b, c = st.columns(3)
-    with a: metric_card("Raw rows", "508")
-    with b: metric_card("Removed / fixed", "5 dup \u00b7 13 NA \u00b7 3 bad")
-    with c: metric_card("Clean rows", "500")
-
-    kicker("Step 1 \u2014 cleansing")
-    st.markdown('<div class="note">The raw export carries realistic mess: <b>5 duplicate rows</b>, '
-        '<b>13 missing cells</b>, a stray <b>text value</b> in a number column, and <b>3 impossible outliers</b> '
-        '(rotation 999\u00b0, U = \u22125, depth 7.5). Cleansing coerces numbers, drops duplicates, '
-        'median-imputes the blanks, and removes out-of-range rows \u2192 <b>508 \u2192 500</b>.</div>',
-        unsafe_allow_html=True)
-    if raw is not None:
-        with st.expander("Peek at the raw file (the dirty rows are in here)"):
-            st.dataframe(raw.head(12), width='stretch', height=300)
-
-    kicker("Step 2 \u2014 transformation")
-    st.markdown('<div class="note">A model only reads numbers, so the one text column, <b>Orientation</b>, '
-        'is <b>one-hot encoded</b> into four 0/1 flags (Orient_N/E/S/W). "S" becomes [0,0,1,0]. The six '
-        'numeric sliders pass through unchanged \u2014 a Random Forest needs no scaling.</div>',
-        unsafe_allow_html=True)
-
-    kicker("Step 3 \u2014 integration (the target)")
-    st.markdown('<div class="note">The heat-gain target is built from <b>real Cairo solar exposure</b> '
-        '(annual irradiance on each vertical facade, computed with pvlib: S\u22481294, E/W\u22481090, '
-        'N\u2248552 kWh/m\u00b2) \u00d7 a <b>geometry-based transmittance</b> (open-area fraction from aperture '
-        'and rotation, reduced by fin shading). <b>SHG = E_beam\u00b7\u03c4_beam + E_diffuse\u00b7\u03c4_diffuse</b>. '
-        'Honest note: the exposure is real; the shading is an engineering estimate, not a ray-traced '
-        'simulation.</div>', unsafe_allow_html=True)
-    if df is not None:
-        st.markdown("**Heat gain by orientation** (mean of the clean dataset)")
-        m = df.groupby("Orientation")[TARGET].mean().reindex(["S", "W", "E", "N"]).reset_index()
-        fig = px.bar(m, x="Orientation", y=TARGET, color="Orientation",
-                     color_discrete_sequence=[CORAL, "#E0A33C", BLUE, TEAL])
-        fig.update_layout(height=320, showlegend=False, yaxis_title="mean SHG (kWh/m\u00b2)")
-        st.plotly_chart(fig, width='stretch')
-
-# ============================================================ 2  ANALYSIS
-with T[2]:
-    st.markdown("## What the data and the model reveal")
-    c1, c2 = st.columns(2)
-    with c1:
-        kicker("Correlation matrix")
-        img("correlation_matrix.png")
-        st.caption("Linear relationships. Openness (0.89) and aperture (0.81) drive heat gain; depth works "
-                   "slightly against it (\u22120.15).")
-    with c2:
-        kicker("Feature importance")
-        img("feature_importance.png")
-        st.caption("What the forest leans on: aperture dominates (0.66), then rotation and orientation.")
-
-    kicker("Design map \u2014 the model swept across the design space")
-    img("design_map.png")
-    st.caption("For each orientation, predicted heat gain across rotation \u00d7 aperture. South & west run "
-               "hot as the screen opens; north stays cool.")
-
-    if df is not None:
-        kicker("Distribution of heat gain by orientation (interactive)")
-        fig = px.histogram(df, x=TARGET, color="Orientation", nbins=40, barmode="overlay", opacity=.7,
-                           color_discrete_map={"S": CORAL, "W": "#E0A33C", "E": BLUE, "N": TEAL})
-        fig.update_layout(height=360, xaxis_title="Solar Heat Gain (kWh/m\u00b2)")
-        st.plotly_chart(fig, width='stretch')
-
-# ============================================================ 3  MODEL
-with T[3]:
-    st.markdown("## Supervised regression, evaluated honestly")
-    a, b, c = st.columns(3)
-    with a: metric_card("R\u00b2 (test, unseen 20%)", f'{METRICS["r2"]:.3f}')
-    with b: metric_card("R\u00b2 (5-fold CV)", f'{METRICS["cv"]:.3f}')
-    with c: metric_card("RMSE", f'{METRICS["rmse"]:.1f} <small>kWh/m\u00b2</small>')
-
-    c1, c2 = st.columns(2)
-    with c1:
-        kicker("Four models compared")
-        img("model_comparison.png")
-    with c2:
-        kicker("Predicted vs actual (held-out test)")
-        img("pred_vs_actual.png")
-
-    st.dataframe(COMPARE, hide_index=True, width='stretch')
-
-    kicker("Learning curve")
-    img("learning_curve.png")
-    st.markdown('<div class="note"><b>Why Random Forest?</b> Gradient Boosting edged it (0.957 vs 0.952) but '
-        'within noise; the forest is more robust on a small, noisy dataset, its test and CV scores stay close '
-        '(no overfitting), and it gives clean feature importances. A Random Forest is 300 decision trees, each '
-        'trained on a different resample of the data, with their predictions averaged.</div>',
-        unsafe_allow_html=True)
-
-# ============================================================ 4  DESIGN STUDIO
-with T[4]:
-    st.markdown("## Design a screen \u2014 get the heat gain instantly")
-    cL, cR = st.columns([1, 1.15])
-    with cL:
-        o   = st.selectbox("Orientation", ORIENTS, index=2,
-                           format_func=lambda x: f"{x}  \u00b7  {EXPOSURE[x]} kWh/m\u00b2 exposure")
-        u   = st.slider("Panels across (U)", 1, 100, 50)
-        v   = st.slider("Panels up (V)", 1, 100, 50)
-        dep = st.slider("Fin depth", 0.10, 1.00, 0.55)
-        att = st.slider("Attractor pull", 0.00, 0.10, 0.05)
-        ap  = st.slider("Aperture (openness)", 0, 100, 55)
-        rot = st.slider("Panel rotation", 0, 100, 45)
-        d = {"U_Divisions": u, "V_Divisions": v, "Depth_Factor": dep, "Attractor_Strength": att,
-             "Aperture_Target": ap, "Max_Rotation_deg": rot, "Orientation": o}
-    with cR:
+    kicker("Design it \u2014 the model answers live")
+    left, right = st.columns([1, 1.25])
+    with left:
+        st.markdown("**Move the six sliders.** The screen and the predicted heat update instantly.")
+        d = {}
+        d["Orientation"] = st.selectbox("Facade orientation", ORIENTS, index=2,
+                                        format_func=lambda o: f"{o}  \u00b7  {EXPOSURE[o]} kWh/m\u00b2 exposure")
+        d["U_Divisions"]       = st.slider(NICE["U_Divisions"], 1, 100, 50)
+        d["V_Divisions"]       = st.slider(NICE["V_Divisions"], 1, 100, 50)
+        d["Depth_Factor"]      = st.slider(NICE["Depth_Factor"], 0.10, 1.00, 0.55, 0.01)
+        d["Attractor_Strength"]= st.slider(NICE["Attractor_Strength"], 0.00, 0.10, 0.05, 0.005)
+        d["Aperture_Target"]   = st.slider(NICE["Aperture_Target"]+" (%)", 0, 100, 60)
+        d["Max_Rotation_deg"]  = st.slider(NICE["Max_Rotation_deg"]+" (deg)", 0, 100, 50)
+    with right:
         shg = predict_one(forest, d)
-        frac = 0 if SHG_HI == SHG_LO else np.clip((shg - SHG_LO)/(SHG_HI - SHG_LO), 0, 1)
-        col = CORAL if frac > 0.66 else ("#E0A33C" if frac > 0.33 else TEAL)
-        verdict = "runs hot" if frac > 0.66 else ("moderate" if frac > 0.33 else "stays cool")
-        st.markdown(f'<div class="verdict" style="border-color:{col}; background:{col}1A;">'
-            f'<div style="font-size:12px; letter-spacing:.1em; color:{col}; text-transform:uppercase;">'
-            f'Predicted solar heat gain \u00b7 {verdict}</div>'
-            f'<div style="font-size:46px; font-weight:700; color:#FFFFFF; line-height:1.05;">{shg:,.0f} '
-            f'<span style="font-size:18px; color:#9BA1AC;">kWh/m\u00b2/yr</span></div></div>',
-            unsafe_allow_html=True)
-        st.plotly_chart(facade_figure(d), width='stretch')
-    gh_export_block(d, shg, "studio")
+        frac = np.clip((shg - SHG_LO) / max(SHG_HI - SHG_LO, 1e-6), 0, 1)
+        if   frac < .33: col, label, msg = TEAL,  "COOL SCREEN",     "Low solar gain \u2014 this screen keeps the cooling load down."
+        elif frac < .66: col, label, msg = "#BA7517", "MODERATE",    "Middle of the range \u2014 a workable daylight/heat balance."
+        else:            col, label, msg = AMBER, "HOT SCREEN",      "High solar gain \u2014 close the aperture or cut rotation to cool it."
+        st.markdown(f'<div class="sk-verdict" style="border-color:{col}; background:{col}18;">'
+                    f'<div style="font-family:Space Mono,monospace; font-size:11px; letter-spacing:.1em; color:{col};">PREDICTED SOLAR HEAT GAIN \u00b7 {label}</div>'
+                    f'<div style="font-family:Fraunces,serif; font-size:44px; color:{INK}; line-height:1.1;">{shg:,.0f} '
+                    f'<span style="font-size:18px; color:{MUTED};">kWh/m\u00b2/yr</span></div>'
+                    f'<div style="color:#5F5E5A; font-size:14px;">{msg}</div></div>', unsafe_allow_html=True)
+        # where this design sits among the 500
+        fig = px.histogram(df, x=TARGET, nbins=40, title="Where this design sits among the 500 sampled screens")
+        fig.update_traces(marker_color=LINE)
+        fig.add_vline(x=shg, line_color=col, line_width=3,
+                      annotation_text="your design", annotation_position="top")
+        fig.update_layout(height=240, showlegend=False, xaxis_title="Solar Heat Gain (kWh/m\u00b2)")
+        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(facade_figure(d), use_container_width=True)
+    st.caption("Schematic preview: panels near the attractor (star) rotate and open more. The real screen "
+               "carries 2\u00b7U\u00b7V triangular panels; the prediction uses the full trained forest.")
 
-    st.divider()
-    st.markdown("## Or let the model find the best design")
-    oc1, oc2 = st.columns([1, 1.25])
-    with oc1:
-        o2 = st.selectbox("Orientation ", ORIENTS, index=2, key="opt_o",
-                          format_func=lambda x: f"{x}  \u00b7  {EXPOSURE[x]} kWh/m\u00b2")
-        mode = st.radio("Goal", ["Coolest possible screen", "Most open screen under a heat budget"], key="opt_m")
-        budget = None
-        if mode.startswith("Most open"):
-            lo, hi = int(df[TARGET].min()), int(df[TARGET].max())
-            budget = st.slider("Heat-gain budget (kWh/m\u00b2/yr)", lo, hi, int((lo+hi)/2), key="opt_b")
-        go_ = st.button("\U0001F50D  Find best design", type="primary", width='stretch', key="opt_go")
-    with oc2:
-        if go_:
-            with st.spinner("Scoring 3,000 candidate screens\u2026"):
-                n = 3000; rng = np.random.default_rng(0)
-                cand = pd.DataFrame({"Orientation": o2,
-                    "U_Divisions": rng.integers(1,101,n), "V_Divisions": rng.integers(1,101,n),
-                    "Depth_Factor": rng.uniform(.1,1,n).round(2), "Attractor_Strength": rng.uniform(0,.1,n).round(3),
-                    "Aperture_Target": rng.integers(0,101,n), "Max_Rotation_deg": rng.integers(0,101,n)})
-                cand["SHG"] = predict_df(forest, cand)
-                if budget is None:
-                    best = cand.loc[cand["SHG"].idxmin()]
-                else:
-                    ok = cand[cand["SHG"] <= budget]
-                    best = (ok.loc[ok["Aperture_Target"].idxmax()] if len(ok) else cand.loc[cand["SHG"].idxmin()])
-                    if not len(ok): st.warning(f"Nothing stays under {budget} facing {o2}; showing coolest.")
-            ik = ("U_Divisions","V_Divisions","Aperture_Target","Max_Rotation_deg")
-            d2 = {k:(int(best[k]) if k in ik else round(float(best[k]),3) if k in ("Depth_Factor","Attractor_Strength")
-                  else o2) for k in FEATURE_COLS}
-            shg2 = float(best["SHG"])
-            st.markdown(f'<div class="verdict" style="border-color:{TEAL}; background:{TEAL}1A;">'
-                f'<div style="font-size:12px; letter-spacing:.1em; color:{TEAL}; text-transform:uppercase;">'
-                f'Recommended screen \u00b7 predicted heat gain</div>'
-                f'<div style="font-size:40px; font-weight:700; color:#FFFFFF;">{shg2:,.0f} '
-                f'<span style="font-size:17px; color:#9BA1AC;">kWh/m\u00b2/yr</span></div></div>', unsafe_allow_html=True)
-            st.dataframe(pd.DataFrame({"Parameter": [NICE[k] for k in FEATURE_COLS],
-                                       "Value": [d2[k] for k in FEATURE_COLS]}), hide_index=True, width='stretch')
-            gh_export_block(d2, shg2, "opt")
-        else:
-            st.info("Pick a goal and press **Find best design** \u2014 the model searches and returns a screen "
-                    "you can send to Grasshopper.")
+# ============================================================ 3  DATA PROCESSING
+with T[2]:
+    kicker("Phase 2 \u2014 auditable, reproducible")
+    st.subheader("From a messy raw export to a clean, model-ready table")
+    st.markdown("This page runs the cleaning **live on the raw file** so every step is visible and the "
+                "before/after counts are auditable \u2014 nothing is hidden inside a script.")
 
-# ============================================================ 5  GRASSHOPPER & FILES
+    # ---- show the raw problems
+    st.markdown("##### 1 \u00b7 The raw export and its problems")
+    rawN = len(raw)
+    coerced = {c: pd.to_numeric(raw[c], errors="coerce") for c in NUM}
+    n_dups   = int(raw.duplicated().sum())
+    n_missing= int(sum(v.isna().sum() for v in coerced.values()))
+    oor = 0
+    bounds = {"U_Divisions":(1,100),"V_Divisions":(1,100),"Depth_Factor":(.1,1),
+              "Attractor_Strength":(0,.1),"Aperture_Target":(0,100),"Max_Rotation_deg":(0,100)}
+    for c,(lo,hi) in bounds.items():
+        v = coerced[c]; oor += int(((v<lo)|(v>hi)).sum())
+    c1,c2,c3,c4 = st.columns(4)
+    c1.metric("Raw rows", f"{rawN}")
+    c2.metric("Duplicate rows", f"{n_dups}")
+    c3.metric("Missing / bad cells", f"{n_missing}")
+    c4.metric("Out-of-range cells", f"{oor}")
+    st.dataframe(raw.head(8), use_container_width=True, height=240)
+    st.markdown('<div class="sk-step">The raw CSV reads as <b>mixed text</b> (a stray <code>n/a</code> '
+                'in a numeric column), carries <b>exact duplicate rows</b>, scattered <b>missing values</b>, '
+                'and a few <b>physically impossible outliers</b> (e.g. rotation = 999\u00b0, depth = 7.5, '
+                'divisions = \u22125). All four must be fixed before training.</div>', unsafe_allow_html=True)
+
+    # ---- run the four cleansing operations live
+    st.markdown("##### 2 \u00b7 Four cleansing operations \u2014 with before / after counts")
+    def cleanse(rw):
+        d = rw.copy(); rep = {"rows_in": len(d)}
+        for c in NUM: d[c] = pd.to_numeric(d[c], errors="coerce")   # (a) coerce -> text becomes NaN
+        b = len(d); d = d.drop_duplicates().reset_index(drop=True)  # (b) drop duplicates
+        rep["duplicates_removed"] = b - len(d)
+        rep["missing_cells_imputed"] = int(d[NUM].isna().sum().sum())
+        for c in NUM: d[c] = d[c].fillna(d[c].median())             # (c) median impute
+        b = len(d); m = pd.Series(True, index=d.index)              # (d) drop out-of-range
+        for c,(lo,hi) in bounds.items(): m &= d[c].between(lo,hi)
+        d = d[m].reset_index(drop=True); rep["out_of_range_removed"] = b - len(d)
+        for c in ["U_Divisions","V_Divisions","Aperture_Target","Max_Rotation_deg"]:
+            d[c] = d[c].round().astype(int)                          # (e) restore int dtypes
+        rep["rows_out"] = len(d); return d, rep
+    clean, rep = cleanse(raw)
+    steps = [("a","Coerce to numeric","stray text \u2192 NaN so it can be repaired"),
+             ("b","Drop exact duplicates", f'{rep["duplicates_removed"]} identical rows removed'),
+             ("c","Median-impute missing", f'{rep["missing_cells_imputed"]} isolated gaps filled with each column median'),
+             ("d","Remove out-of-range", f'{rep["out_of_range_removed"]} rows outside each slider\u2019s real Min..Max dropped'),
+             ("e","Restore integer dtypes","division & angle columns back to whole numbers")]
+    for k,t,why in steps:
+        st.markdown(f'<div class="sk-step"><b>{k})&nbsp; {t}</b> &mdash; {why}</div>', unsafe_allow_html=True)
+    st.success(f"Result: **{rep['rows_in']} raw rows \u2192 {rep['rows_out']} clean rows**, "
+               f"every column numeric and within range.")
+
+    # ---- transformation (one-hot)
+    st.markdown("##### 3 \u00b7 Data transformation \u2014 qualitative \u2192 quantitative")
+    st.markdown("The only text feature, **Orientation**, is one-hot encoded so the model can read it as numbers.")
+    demo = pd.DataFrame({"Orientation": ["S","N","E","W","S"]})
+    oh = pd.get_dummies(demo["Orientation"]).reindex(columns=["E","N","S","W"], fill_value=0).astype(int)
+    oh.columns = [f"Orient_{c}" for c in oh.columns]
+    st.dataframe(pd.concat([demo, oh], axis=1), use_container_width=True, height=220)
+
+    # ---- integration (derive targets)
+    st.markdown("##### 4 \u00b7 Data integration \u2014 deriving the performance targets")
+    st.markdown("New target columns are computed from the features with documented, physically-motivated "
+                "equations (faithful to the Grasshopper geometry). The Random Forest learns the relationship "
+                "between the design parameters and **Solar Heat Gain**.")
+    st.markdown('<div class="sk-eq">'
+                'Panel_Count&nbsp; = 2 &middot; U &middot; V<br>'
+                'Avg_Tilt&deg;&nbsp;&nbsp;&nbsp; = clip( MaxRot &middot; (0.5 + 5&middot;Attractor), 0, 90 )<br>'
+                'Openness&nbsp;&nbsp;&nbsp; = clip( (0.2 + 0.8&middot;Aperture/100) &middot; Tilt/90, 0, 1 )<br>'
+                'Shading_Area = A_facade + 2&middot;Depth&middot;&radic;(N&middot;A_facade)<br>'
+                'Solar_Heat_Gain = Exposure(orient) &middot; Openness &middot; (1 \u2212 0.55&middot;g_block) &middot; density &nbsp;(+4% noise)'
+                '</div>', unsafe_allow_html=True)
+    st.caption("Honest note: targets come from a parametric reconstruction + illustrative equations, not "
+               "measured simulation. Swap this step for a Grasshopper-exported CSV to make them measured.")
+    st.download_button("\u2b07 Download the clean dataset (CSV)",
+                       data=df.to_csv(index=False).encode(), file_name="shading_units_dataset.csv",
+                       mime="text/csv")
+
+# ============================================================ 4  EXPLORE
+with T[3]:
+    kicker("Phase 3 \u2014 exploratory data analysis")
+    st.subheader("What the 500 designs look like")
+    DERIV = ["Total_Shading_Area_m2","Openness_Ratio","Avg_Panel_Tilt_deg","Projection_Depth_m","Material_Volume_m3",TARGET]
+    sub = st.radio("View", ["Correlation matrix","Feature distributions","Solar gain vs drivers"], horizontal=True)
+    if sub == "Correlation matrix":
+        cc = df[NUM+DERIV].corr()
+        fig = px.imshow(cc, color_continuous_scale="RdBu_r", zmin=-1, zmax=1, aspect="auto",
+                        text_auto=".2f", title="Correlation matrix \u2014 features + targets")
+        fig.update_layout(height=620); fig.update_xaxes(tickangle=45)
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("Solar Heat Gain tracks **openness, rotation and aperture** most strongly \u2014 the levers "
+                    "the model later confirms are the dominant drivers.")
+    elif sub == "Feature distributions":
+        cols = st.columns(3)
+        for i, c in enumerate(NUM):
+            with cols[i % 3]:
+                st.plotly_chart(px.histogram(df, x=c, nbins=30, title=NICE[c]).update_layout(height=260, showlegend=False),
+                                use_container_width=True)
+    else:
+        drv = st.selectbox("Driver", ["Max_Rotation_deg","Aperture_Target","Depth_Factor","Attractor_Strength"])
+        st.plotly_chart(px.scatter(df, x=drv, y=TARGET, color="Orientation", color_discrete_map=ORIENT_COLORS,
+                                    opacity=.7, title=f"{NICE.get(drv,drv)} vs Solar Heat Gain").update_layout(height=520),
+                        use_container_width=True)
+
+# ============================================================ 5  DESIGN MAP
+with T[4]:
+    kicker("The surrogate as a design tool")
+    st.subheader("Every pixel is one design, evaluated by the model")
+    st.markdown("Hundreds of screens, predicted in about a second. Each map fixes U=V=50, depth 0.55, "
+                "attractor 0.05 and sweeps **rotation \u00d7 aperture** for one orientation.")
+    o = st.select_slider("Orientation", ORIENTS, value="S")
+    n = 50
+    rot = np.linspace(0,100,n); ap = np.linspace(0,100,n)
+    R,A = np.meshgrid(rot,ap)
+    grid = pd.DataFrame({"U_Divisions":50,"V_Divisions":50,"Depth_Factor":.55,"Attractor_Strength":.05,
+                         "Aperture_Target":A.ravel(),"Max_Rotation_deg":R.ravel(),"Orientation":o})
+    Z = predict_df(forest, grid).reshape(n,n)
+    fig = go.Figure(go.Heatmap(z=Z, x=rot, y=ap, colorscale="YlOrRd",
+                               colorbar=dict(title="SHG<br>kWh/m\u00b2")))
+    fig.update_layout(height=520, title=f"Predicted Solar Heat Gain \u2014 facing {o}",
+                      xaxis_title="Max rotation (deg)", yaxis_title="Aperture target (%)")
+    st.plotly_chart(fig, use_container_width=True)
+    st.markdown("**Cool sits where rotation and aperture are low; the screen heats up toward the top-right.** "
+                "Point at the colour you can afford and read off the sliders that get you there.")
+
+# ============================================================ 6  THE MODEL
 with T[5]:
-    st.markdown("## The predictive node, and everything to download")
-    st.markdown('<div class="note">The <b>predictive node</b> is a Python component inside Grasshopper that '
-        'loads this trained model and outputs predicted heat gain from the same six sliders \u2014 so geometry '
-        'and its cooling consequence are generated together, live. The portable build reads the JSON below and '
-        'needs <b>no scikit-learn</b>, so it runs even where Rhino can\u2019t install packages.</div>',
-        unsafe_allow_html=True)
+    kicker("Phase 4 \u2014 supervised regression, evaluated honestly")
+    st.subheader("Trained, validated and tested")
+    c1,c2,c3,c4 = st.columns(4)
+    c1.metric("R\u00b2 (test, unseen 20%)", "0.937")
+    c2.metric("R\u00b2 (5-fold CV)", "0.921")
+    c3.metric("RMSE", "20.4 kWh/m\u00b2")
+    c4.metric("Forest size", "300 trees")
+    st.markdown("**Approach.** 500 sampled designs, an 80/20 train/test split, four candidate regressors "
+                "compared, 5-fold cross-validation as the overfitting check. The **Random Forest** is deployed "
+                "\u2014 within the noise band of Gradient Boosting but more interpretable and robust on a small, "
+                "noisy dataset.")
+    comp = pd.DataFrame({
+        "Model": ["Gradient Boosting","Random Forest","Decision Tree","Linear Reg."],
+        "R\u00b2 test": [0.965, 0.937, 0.846, 0.798],
+        "R\u00b2 5-fold CV": [0.937, 0.921, 0.849, 0.836],
+        "RMSE": [15.2, 20.4, 31.9, 36.5]})
+    cc1, cc2 = st.columns([1.1,1])
+    with cc1:
+        st.dataframe(comp, use_container_width=True, hide_index=True)
+        st.caption("\u2605 Random Forest deployed.")
+    with cc2:
+        bar = px.bar(comp, x="R\u00b2 test", y="Model", orientation="h", title="Test R\u00b2 by model",
+                     color="Model", color_discrete_sequence=[AMBER, TEAL, NAVY, "#BA7517"])
+        bar.update_layout(height=300, showlegend=False, xaxis_range=[0,1])
+        st.plotly_chart(bar, use_container_width=True)
 
-    kicker("Downloads")
-    files = [("shading_shg_rf_model.pkl", "Trained Random Forest (scikit-learn)"),
-             ("shading_rf_portable.json", "Same model, dependency-free (for the GH node)"),
-             ("shading_units_dataset.csv", "Clean 500-design dataset"),
-             ("shading_units_raw.csv", "Raw 508-row dataset (pre-cleaning)"),
-             ("gh_node_predict_portable.py", "Grasshopper predictive-node script")]
-    for fn, desc in files:
-        if os.path.exists(fn):
-            with open(fn, "rb") as fh:
-                st.download_button(f"\u2b07  {fn}  \u2014  {desc}", fh.read(), file_name=fn,
-                                   key=f"dl_{fn}", width='stretch')
+    st.markdown("##### Why your professor can open the model now")
+    st.markdown(
+        "A scikit-learn `.pkl` only re-opens reliably on the **exact library version** that wrote it \u2014 "
+        "the original file was saved on scikit-learn 1.6.1 and failed to unpickle elsewhere. Two fixes ship "
+        "together:")
+    st.markdown(
+        "- **`shading_shg_rf_model.pkl`** \u2014 retrained as a *plain* Random Forest (no ColumnTransformer), "
+        "which is far more stable across scikit-learn versions.\n"
+        "- **`shading_rf_portable.json`** \u2014 the same 300-tree forest exported to pure JSON. "
+        "`load_model.py` tries the `.pkl` first and **auto-falls-back** to this, so prediction needs **no "
+        "scikit-learn at all** \u2014 it is exactly what powers this dashboard. Verified identical to the "
+        "`.pkl` (max\u2009|diff|\u2009=\u20090.0).")
+    st.caption("This app itself is the running proof: it predicts entirely from the portable JSON.")
 
-    st.caption("Drop the script into a Python 3 component in Grasshopper, wire the six sliders + orientation "
-               "in, point it at the .pkl (or the JSON), and it returns the predicted Solar Heat Gain live.")
+st.markdown('<div class="sk-rule2" style="margin-top:24px;"></div>', unsafe_allow_html=True)
+st.caption("Smart Skylight \u00b7 CCAS 2.6 Intelligent Systems Design \u00b7 predictions from the portable Random Forest (zero-install).")
