@@ -24,7 +24,7 @@ except Exception:
 
 st.set_page_config(page_title="Smart Skylight", page_icon="\U0001F7E7", layout="wide")
 
-CORAL = "#EC5242"; SKY = "#7FB2F0"; INK = "#E6E6E6"
+CORAL = "#EC5242"; SKY = "#7FB2F0"
 # --------------------------------------------------------------- styling
 st.markdown("""
 <style>
@@ -38,9 +38,7 @@ h3 {font-size:22px;}
 .idea b {color:#FFFFFF;} .idea i {color:#C9CDD4;}
 .mc {padding:2px 0 14px;}
 .mc .l {color:#8A909B; font-size:14px; margin-bottom:1px;}
-.mc .v {color:#FFFFFF; font-family:Georgia,serif; font-size:38px; font-weight:700; line-height:1.05;
-  overflow-wrap:normal; word-break:keep-all;}
-.mc .v.sm {font-size:22px; line-height:1.2;}
+.mc .v {color:#FFFFFF; font-family:Georgia,serif; font-size:38px; font-weight:700; line-height:1.05;}
 .mc .v small {font-size:17px; color:#9AA0AB;}
 .flow {margin:6px 0 2px; line-height:2.7;}
 .pill {display:inline-block; background:#1A1D26; border:1px solid #2C313C; border-radius:18px;
@@ -83,9 +81,6 @@ pio.templates.default = "plotly_dark+sky"
 NUM = ["U_Divisions","V_Divisions","Depth_Factor","Attractor_Strength","Aperture_Target","Max_Rotation_deg"]
 TARGET = "Solar_Heat_Gain_kWh_m2"
 ORI = ["N","E","S","W"]; OCOL = {"S":CORAL,"W":"#E0A33C","E":SKY,"N":"#5FA89F"}
-NICE = {"U_Divisions":"U_Divisions","V_Divisions":"V_Divisions","Depth_Factor":"Depth_Factor",
-        "Attractor_Strength":"Attractor_Strength","Aperture_Target":"Aperture_Target",
-        "Max_Rotation_deg":"Max_Rotation_deg"}
 CORR_COLS = NUM + ["Panel_Count","Avg_Panel_Tilt_deg","Projection_Depth_m","Openness_Ratio",
                    "Total_Shading_Area_m2","Material_Volume_m3", TARGET]
 
@@ -113,9 +108,8 @@ def predict_df(forest, frame):
     return np.array(out)
 def predict_one(forest,d): return float(predict_df(forest, pd.DataFrame([d]))[0])
 
-def mcard(label, value, big=True):
-    cls = "v" if big else "v sm"
-    st.markdown(f'<div class="mc"><div class="l">{label}</div><div class="{cls}">{value}</div></div>',
+def mcard(label, value):
+    st.markdown(f'<div class="mc"><div class="l">{label}</div><div class="v">{value}</div></div>',
                 unsafe_allow_html=True)
 def vtable(headers, rows, kcol=0):
     h="".join(f"<th>{x}</th>" for x in headers)
@@ -158,8 +152,8 @@ with T[0]:
         with a: mcard("Designs in dataset", "500")
         with b: mcard("Test accuracy", "R² ≈ 0.94")
         c,d = st.columns(2)
-        with c: mcard("Features", "6 + orientation", big=False)
-        with d: mcard("Deployed model", "Random Forest", big=False)
+        with c: mcard("Features", "6 + orientation")
+        with d: mcard("Deployed model", "Random Forest")
 
     st.markdown("## The workflow (end to end)")
     steps=["Grasshopper model","CSV dataset","Data cleaning","Feature engineering","Train / test split",
@@ -200,12 +194,12 @@ with T[1]:
     st.markdown("## Phase 2 — from messy export to model-ready table")
     a,b,c,d = st.columns(4)
     with a: mcard("Raw rows","508")
-    with b: mcard("Duplicates found","5")
+    with b: mcard("Duplicates found","4")
     with c: mcard("Missing / garbled cells","13")
     with d: mcard("Clean rows","500")
 
     with st.expander("See the raw (pre-cleaning) data"):
-        if raw is not None: st.dataframe(raw.head(10), use_container_width=True, height=390)
+        if raw is not None: st.dataframe(raw.head(10), width='stretch', height=390)
 
     st.markdown('<div class="idea" style="margin-top:14px;"><b>Cleansing — four auditable operations:</b> '
         '(1) coerce text like <span class="codepill">"n/a"</span> to <span class="codepill">NaN</span> · '
@@ -217,7 +211,7 @@ with T[1]:
         unsafe_allow_html=True)
     oh = pd.get_dummies(df["Orientation"].head(5), prefix="Orientation").astype(int)
     oh = oh.reindex(columns=["Orientation_E","Orientation_N","Orientation_S","Orientation_W"], fill_value=0)
-    st.dataframe(oh, use_container_width=True)
+    st.dataframe(oh, width='stretch')
 
     st.markdown('<div class="idea" style="margin-top:10px;"><b>Integration — deriving the targets</b> from the '
                 'features, e.g.:</div>', unsafe_allow_html=True)
@@ -246,7 +240,7 @@ with T[2]:
     fig.update_layout(height=560, margin=dict(l=10,r=10,t=10,b=10),
                       yaxis=dict(autorange="reversed"))
     fig.update_xaxes(tickangle=-40)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     dc1, dc2 = st.columns(2)
     with dc1: distf = st.selectbox("Distribution of", NUM, index=2)
@@ -254,12 +248,12 @@ with T[2]:
     g1, g2 = st.columns(2)
     with g1:
         h = px.histogram(d, x=distf, nbins=26, color_discrete_sequence=[SKY])
-        h.update_layout(height=420, bargap=.03, yaxis_title="count"); st.plotly_chart(h, use_container_width=True)
+        h.update_layout(height=420, bargap=.03, yaxis_title="count"); st.plotly_chart(h, width='stretch')
     with g2:
         s = px.scatter(d, x=vsf, y=TARGET, color="Orientation", opacity=.75,
                        color_discrete_map=OCOL, category_orders={"Orientation":["S","W","E","N"]})
         s.update_traces(marker=dict(size=6)); s.update_layout(height=420)
-        st.plotly_chart(s, use_container_width=True)
+        st.plotly_chart(s, width='stretch')
 
 # ============================================================ MODEL
 with T[3]:
@@ -267,7 +261,7 @@ with T[3]:
     st.markdown('<div class="idea"><b>Protocol:</b> 80% train / 20% held-out test, with 5-fold '
         'cross-validation for validation. Four models compared (full workflow in the notebook):</div>',
         unsafe_allow_html=True)
-    cmp = M["compare"]; star = {"Random Forest":"⭐ "}
+    cmp = M["compare"]
     rows=[]
     for name in ["Gradient Boosting","Random Forest","Decision Tree","Linear Regression"]:
         s=cmp[name]; label=("⭐ "+name+" (deployed)") if name=="Random Forest" else name
@@ -288,7 +282,7 @@ with T[3]:
     fi = go.Figure(go.Bar(x=imp.values, y=imp.index, orientation="h", marker_color=SKY))
     fi.update_layout(height=430, xaxis_title="importance", yaxis_title="feature",
                      margin=dict(l=10,r=10,t=10,b=10))
-    st.plotly_chart(fi, use_container_width=True)
+    st.plotly_chart(fi, width='stretch')
     st.markdown(f'<div class="mono">root rule of tree #1:&nbsp; if <b>{M["root_feat"]}</b> &lt;= '
                 f'{M["root_thr"]} -&gt; go left, else go right</div>', unsafe_allow_html=True)
 
@@ -332,7 +326,7 @@ with T[4]:
                  text=["your design"], textposition="top center", textfont=dict(color=SKY, size=11)))
     cm.update_layout(height=560, showlegend=False, xaxis_title="Max_Rotation_deg",
                      yaxis_title="Aperture_Target", margin=dict(l=10,r=10,t=10,b=10))
-    st.plotly_chart(cm, use_container_width=True)
+    st.plotly_chart(cm, width='stretch')
 
 # ============================================================ GRASSHOPPER & FILES
 with T[5]:
