@@ -38,7 +38,9 @@ h3 {font-size:22px;}
 .idea b {color:#FFFFFF;} .idea i {color:#C9CDD4;}
 .mc {padding:2px 0 14px;}
 .mc .l {color:#8A909B; font-size:14px; margin-bottom:1px;}
-.mc .v {color:#FFFFFF; font-family:Georgia,serif; font-size:38px; font-weight:700; line-height:1.05;}
+.mc .v {color:#FFFFFF; font-family:Georgia,serif; font-size:38px; font-weight:700; line-height:1.05;
+  overflow-wrap:normal; word-break:keep-all;}
+.mc .v.sm {font-size:22px; line-height:1.2;}
 .mc .v small {font-size:17px; color:#9AA0AB;}
 .flow {margin:6px 0 2px; line-height:2.7;}
 .pill {display:inline-block; background:#1A1D26; border:1px solid #2C313C; border-radius:18px;
@@ -111,8 +113,9 @@ def predict_df(forest, frame):
     return np.array(out)
 def predict_one(forest,d): return float(predict_df(forest, pd.DataFrame([d]))[0])
 
-def mcard(label, value):
-    st.markdown(f'<div class="mc"><div class="l">{label}</div><div class="v">{value}</div></div>',
+def mcard(label, value, big=True):
+    cls = "v" if big else "v sm"
+    st.markdown(f'<div class="mc"><div class="l">{label}</div><div class="{cls}">{value}</div></div>',
                 unsafe_allow_html=True)
 def vtable(headers, rows, kcol=0):
     h="".join(f"<th>{x}</th>" for x in headers)
@@ -155,8 +158,8 @@ with T[0]:
         with a: mcard("Designs in dataset", "500")
         with b: mcard("Test accuracy", "R² ≈ 0.94")
         c,d = st.columns(2)
-        with c: mcard("Features", "6 + orientation")
-        with d: mcard("Deployed model", "Random Forest")
+        with c: mcard("Features", "6 + orientation", big=False)
+        with d: mcard("Deployed model", "Random Forest", big=False)
 
     st.markdown("## The workflow (end to end)")
     steps=["Grasshopper model","CSV dataset","Data cleaning","Feature engineering","Train / test split",
