@@ -33,7 +33,7 @@ SKY = "#7FB2F0"
 st.markdown(
     """
 <style>
-.block-container {padding-top:1.3rem; max-width:1180px;}
+.block-container {padding-top:4.5rem; max-width:1180px;}
 h1,h2,h3,h4 {font-family: Georgia,'Source Serif Pro','Times New Roman',serif !important;
   color:#FFFFFF !important; font-weight:700; letter-spacing:-.005em;}
 h2 {font-size:31px; margin:.15em 0 .15em;}
@@ -375,7 +375,8 @@ with T[2]:
         )
     )
     fig.update_layout(height=560, margin=dict(l=10, r=10, t=10, b=10), yaxis=dict(autorange="reversed"))
-    fig.update_xaxes(tickangle=-40)
+    fig.update_xaxes(tickangle=-40, automargin=True)
+    fig.update_yaxes(automargin=True)
     st.plotly_chart(fig, width="stretch")
 
     dc1, dc2 = st.columns(2)
