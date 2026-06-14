@@ -364,7 +364,7 @@ with T[2]:
             z=corr.values,
             x=cc,
             y=cc,
-            colorscale="RdBu",
+            colorscale="RdBu_r",
             zmid=0,
             zmin=-1,
             zmax=1,
